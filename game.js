@@ -79,7 +79,7 @@
     brickW: 5.4,
     brickH: 5.4,
     barriers: [], // defensive steel blocks
-    barrierBox: null, // unified indestructible bounding box
+    barrierBoxes: [], // unified indestructible bounding boxes
     powerups: [],
     activeEffects: {
       fireball: 0,
@@ -137,9 +137,28 @@
     }
   }
 
-  // STAGE GENERATION
+  // STAGE GENERATION (15 Unique Pinball Stages)
+  const STAGE_NAMES = [
+    '',
+    'PROTO CORE (初生核心)',
+    'CROSS BARRIER (十字壁障)',
+    'TWIN ORBS (双子星核)',
+    'QUANTUM PRISM (量子棱镜)',
+    'HOURGLASS MAZE (沙漏迷宫)',
+    'DUAL CORE (双重复核)',
+    'CYCLONE VORTEX (气旋漩涡)',
+    'CYBER SHIELD (赛博盾阵)',
+    'DNA HELIX (双螺旋链)',
+    'BLACK HOLE (黑洞日蚀)',
+    'TRIPLE APEX (三尖裂隙)',
+    'OMEGA CORE (欧米伽穹顶)',
+    'NEON LABYRINTH (霓虹迷宫)',
+    'CHAOS MATRIX (混沌矩阵)',
+    'HYPERNOVA (终焉对撞机)'
+  ];
+
   function generateStage(stageNum) {
-    state.currentStage = stageNum;
+    state.currentStage = stageNum || 12;
     state.firstBreakAchieved = false;
     state.combo = 0;
     state.clearedCount = 0;
@@ -155,26 +174,37 @@
     state.activeBalls = [createBall(state.paddle.x, state.paddle.y - 12, 0, 0)];
 
     const bricks = [];
-    const barriers = [];
+    state.barriers = [];
+    state.barrierBoxes = [];
 
-    if (stageNum === 12) {
-      // STAGE 12: "CORE / BREAK" - Exact replica of the screenshot!
-      // 3,379 bricks filling the upper ~80% of the circle dome
-      const bw = 5.2;
-      const bh = 5.2;
+    // Helper: Add indestructible metallic barrier with AABB collision box
+    function addBarrier(x, y, w, h, cols, color) {
+      state.barrierBoxes.push({ x, y, w, h });
+      const segCols = cols || 1;
+      const barW = w / segCols;
+      for (let i = 0; i < segCols; i++) {
+        state.barriers.push({
+          x: x + i * barW,
+          y: y,
+          w: barW - 0.8,
+          h: h,
+          indestructible: true,
+          color: color || '#64748b'
+        });
+      }
+    }
+
+    // Helper: Build spatial brick matrix
+    function buildGrid(cols, rows, bw, bh, startYOffset, checkBrick) {
       state.brickW = bw;
       state.brickH = bh;
-
-      const cols = 64;
-      const rows = 56;
       state.gridCols = cols;
       state.gridRows = rows;
       const startX = CORE_CX - (cols * bw) / 2;
-      const startY = CORE_CY - CORE_R + 18;
+      const startY = CORE_CY - CORE_R + (startYOffset !== undefined ? startYOffset : 18);
       state.gridStartX = startX;
       state.gridStartY = startY;
 
-      // Build 2D grid
       let count = 0;
       for (let r = 0; r < rows; r++) {
         const rowArr = [];
@@ -183,13 +213,12 @@
           const by = startY + r * bh;
           const bcx = bx + bw / 2;
           const bcy = by + bh / 2;
-          const dist = Math.hypot(bcx - CORE_CX, bcy - CORE_CY);
+          const dx = bcx - CORE_CX;
+          const dy = bcy - CORE_CY;
+          const dist = Math.hypot(dx, dy);
 
-          // Fill circle upper dome: dist <= CORE_R - 8, and cut off bottom ~30%
-          const isInsideCircle = dist <= CORE_R - 7;
-          const isAboveBottomCut = by <= CORE_CY + CORE_R * 0.52;
-
-          if (isInsideCircle && isAboveBottomCut) {
+          const result = checkBrick(r, c, bx, by, bcx, bcy, dx, dy, dist);
+          if (result) {
             rowArr.push({
               x: bx,
               y: by,
@@ -198,7 +227,7 @@
               active: true,
               hp: 1,
               type: 'normal',
-              color: '#f09a82' // Screenshot peach/coral color
+              color: typeof result === 'string' ? result : '#f09a82'
             });
             count++;
           } else {
@@ -207,148 +236,226 @@
         }
         bricks.push(rowArr);
       }
-
       state.totalBricks = count;
+    }
 
-      // Indestructible horizontal steel barrier below the brick dome (just like in the screenshot!)
-      const barrierY = CORE_CY + CORE_R * 0.68;
-      const barW = 7.0;
-      const barH = 7.0;
-      const barCols = 18;
-      const barStartX = CORE_CX - (barCols * barW) / 2;
-      const barTotalWidth = barCols * barW;
-
-      state.barrierBox = {
-        x: barStartX,
-        y: barrierY,
-        w: barTotalWidth,
-        h: barH
-      };
-
-      for (let i = 0; i < barCols; i++) {
-        barriers.push({
-          x: barStartX + i * barW,
-          y: barrierY,
-          w: barW - 0.8,
-          h: barH,
-          indestructible: true,
-          color: '#64748b'
+    switch (state.currentStage) {
+      case 1:
+        // STAGE 1: PROTO CORE (初生核心) - Warmup crescent arch (~380 bricks)
+        buildGrid(36, 28, 8.5, 8.5, 25, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if (dist >= CORE_R * 0.35 && dist <= CORE_R * 0.78 && bcy <= CORE_CY + CORE_R * 0.30) {
+            return (r + c) % 2 === 0 ? '#38bdf8' : '#0284c7';
+          }
+          return null;
         });
-      }
-    } else if (stageNum === 1) {
-      // STAGE 1: Starter Core (~420 bricks)
-      const bw = 8.5;
-      const bh = 8.5;
-      state.brickW = bw;
-      state.brickH = bh;
-      const cols = 36;
-      const rows = 30;
-      state.gridCols = cols;
-      state.gridRows = rows;
-      const startX = CORE_CX - (cols * bw) / 2;
-      const startY = CORE_CY - CORE_R + 25;
-      state.gridStartX = startX;
-      state.gridStartY = startY;
+        break;
 
-      let count = 0;
-      for (let r = 0; r < rows; r++) {
-        const rowArr = [];
-        for (let c = 0; c < cols; c++) {
-          const bx = startX + c * bw;
-          const by = startY + r * bh;
-          const dist = Math.hypot(bx + bw / 2 - CORE_CX, by + bh / 2 - CORE_CY);
-          if (dist <= CORE_R * 0.75 && by <= CORE_CY + CORE_R * 0.35) {
-            rowArr.push({
-              x: bx,
-              y: by,
-              w: bw,
-              h: bh,
-              active: true,
-              hp: 1,
-              type: 'normal',
-              color: '#38bdf8'
-            });
-            count++;
-          } else {
-            rowArr.push(null);
+      case 2:
+        // STAGE 2: CROSS BARRIER (十字壁障) - 4 Quadrants with central cross (~600 bricks)
+        buildGrid(42, 38, 7.2, 7.2, 22, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if (dist <= CORE_R * 0.76 && (Math.abs(dx) > 14 || Math.abs(dy) > 14) && bcy <= CORE_CY + CORE_R * 0.48) {
+            return (r % 2 === 0) ? '#34d399' : '#10b981';
           }
-        }
-        bricks.push(rowArr);
-      }
-      state.totalBricks = count;
-    } else if (stageNum === 6) {
-      // STAGE 6: Double Core / Heart (~1,600 bricks)
-      const bw = 6.5;
-      const bh = 6.5;
-      state.brickW = bw;
-      state.brickH = bh;
-      const cols = 48;
-      const rows = 44;
-      state.gridCols = cols;
-      state.gridRows = rows;
-      const startX = CORE_CX - (cols * bw) / 2;
-      const startY = CORE_CY - CORE_R + 20;
-      state.gridStartX = startX;
-      state.gridStartY = startY;
-
-      let count = 0;
-      for (let r = 0; r < rows; r++) {
-        const rowArr = [];
-        for (let c = 0; c < cols; c++) {
-          const bx = startX + c * bw;
-          const by = startY + r * bh;
-          const dist = Math.hypot(bx + bw / 2 - CORE_CX, by + bh / 2 - CORE_CY);
-          if (dist <= CORE_R - 10 && by <= CORE_CY + CORE_R * 0.48) {
-            // Checkered or tiered colors
-            const col = (r + c) % 2 === 0 ? '#ec4899' : '#f43f5e';
-            rowArr.push({
-              x: bx,
-              y: by,
-              w: bw,
-              h: bh,
-              active: true,
-              hp: 1,
-              type: 'normal',
-              color: col
-            });
-            count++;
-          } else {
-            rowArr.push(null);
-          }
-        }
-        bricks.push(rowArr);
-      }
-      state.totalBricks = count;
-
-      // Indestructible defensive barrier
-      const barrierY = CORE_CY + CORE_R * 0.65;
-      const barW = 8;
-      const barH = 8;
-      const barCols = 12;
-      const barStartX = CORE_CX - 48;
-      const barTotalWidth = barCols * barW;
-
-      state.barrierBox = {
-        x: barStartX,
-        y: barrierY,
-        w: barTotalWidth,
-        h: barH
-      };
-
-      for (let i = 0; i < barCols; i++) {
-        barriers.push({
-          x: barStartX + i * barW,
-          y: barrierY,
-          w: barW - 1,
-          h: barH,
-          indestructible: true,
-          color: '#94a3b8'
+          return null;
         });
-      }
+        addBarrier(CORE_CX - 70, CORE_CY - 4, 140, 8, 16, '#334155');
+        addBarrier(CORE_CX - 4, CORE_CY - 55, 8, 110, 1, '#334155');
+        break;
+
+      case 3:
+        // STAGE 3: TWIN ORBS (双子星核) - Two spherical micro-cores (~750 bricks)
+        buildGrid(48, 42, 6.8, 6.8, 20, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          const d1 = Math.hypot(bcx - (CORE_CX - 65), bcy - (CORE_CY - 15));
+          const d2 = Math.hypot(bcx - (CORE_CX + 65), bcy - (CORE_CY - 15));
+          if (d1 <= 56) return '#a855f7';
+          if (d2 <= 56) return '#6366f1';
+          return null;
+        });
+        addBarrier(CORE_CX - 5, CORE_CY - 60, 10, 110, 1, '#475569');
+        addBarrier(CORE_CX - 40, CORE_CY + CORE_R * 0.65, 80, 7, 10, '#64748b');
+        break;
+
+      case 4:
+        // STAGE 4: QUANTUM PRISM (量子棱镜) - Diamond Rhombus (~900 bricks)
+        buildGrid(50, 46, 6.4, 6.4, 20, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if ((Math.abs(dx) + Math.abs(dy)) <= CORE_R * 0.82 && bcy <= CORE_CY + CORE_R * 0.45) {
+            const colors = ['#fbbf24', '#f59e0b', '#d97706'];
+            return colors[(r + c) % 3];
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 110, CORE_CY + 40, 60, 7, 8, '#64748b');
+        addBarrier(CORE_CX + 50, CORE_CY + 40, 60, 7, 8, '#64748b');
+        break;
+
+      case 5:
+        // STAGE 5: HOURGLASS (沙漏迷宫) - Dual chamber hourglass (~1,150 bricks)
+        buildGrid(52, 48, 6.0, 6.0, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if (dist <= CORE_R * 0.80 && Math.abs(dx) <= Math.abs(dy) * 0.95 + 24 && bcy <= CORE_CY + CORE_R * 0.45) {
+            return (r % 2 === 0) ? '#f43f5e' : '#e11d48';
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 120, CORE_CY - 4, 90, 8, 12, '#475569');
+        addBarrier(CORE_CX + 30, CORE_CY - 4, 90, 8, 12, '#475569');
+        break;
+
+      case 6:
+        // STAGE 6: DUAL CORE (双重复核) - Outer ring & dense inner core (~1,550 bricks)
+        buildGrid(56, 50, 5.8, 5.8, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if ((dist <= CORE_R * 0.35 || (dist >= CORE_R * 0.55 && dist <= CORE_R * 0.85)) && bcy <= CORE_CY + CORE_R * 0.48) {
+            return (dist <= CORE_R * 0.35) ? '#d946ef' : '#ec4899';
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 50, CORE_CY + CORE_R * 0.65, 100, 7, 14, '#64748b');
+        break;
+
+      case 7:
+        // STAGE 7: CYCLONE VORTEX (气旋漩涡) - 4-Arm Spiral Galaxy (~1,750 bricks)
+        buildGrid(58, 52, 5.6, 5.6, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          let theta = Math.atan2(dy, dx);
+          if (Math.sin(theta * 4 - dist * 0.08) > 0.12 && dist <= CORE_R * 0.82 && bcy <= CORE_CY + CORE_R * 0.52) {
+            return (c % 2 === 0) ? '#06b6d4' : '#84cc16';
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 25, CORE_CY - 25, 50, 10, 6, '#475569');
+        addBarrier(CORE_CX - 55, CORE_CY + CORE_R * 0.68, 110, 7, 16, '#64748b');
+        break;
+
+      case 8:
+        // STAGE 8: CYBER SHIELD (赛博盾阵) - Stepped chevron fortress (~2,000 bricks)
+        buildGrid(60, 54, 5.5, 5.5, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if (bcy <= CORE_CY - Math.abs(dx) * 0.55 + 85 && dist <= CORE_R * 0.86 && bcy <= CORE_CY + CORE_R * 0.52) {
+            return (r % 3 === 0) ? '#f97316' : (r % 3 === 1 ? '#fb923c' : '#eab308');
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 65, CORE_CY + CORE_R * 0.66, 130, 7, 18, '#64748b');
+        addBarrier(CORE_CX - 35, CORE_CY + CORE_R * 0.35, 70, 7, 10, '#475569');
+        break;
+
+      case 9:
+        // STAGE 9: DNA HELIX (双螺旋链) - Interlaced sinusoidal strands (~2,250 bricks)
+        buildGrid(60, 54, 5.5, 5.5, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          const wave1 = 48 * Math.sin(bcy * 0.05);
+          const wave2 = -48 * Math.sin(bcy * 0.05);
+          const inStrand1 = Math.abs(dx - wave1) < 20;
+          const inStrand2 = Math.abs(dx - wave2) < 20;
+          const inRung = Math.abs(Math.sin(bcy * 0.08)) > 0.88 && Math.abs(dx) < 45;
+          if ((inStrand1 || inStrand2 || inRung) && dist <= CORE_R * 0.85 && bcy <= CORE_CY + CORE_R * 0.52) {
+            return inStrand1 ? '#14b8a6' : (inStrand2 ? '#8b5cf6' : '#a78bfa');
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 60, CORE_CY + CORE_R * 0.65, 120, 7, 16, '#64748b');
+        break;
+
+      case 10:
+        // STAGE 10: BLACK HOLE (黑洞日蚀) - Toroidal ring with event horizon void (~2,500 bricks)
+        buildGrid(62, 56, 5.3, 5.3, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if (dist >= CORE_R * 0.40 && dist <= CORE_R * 0.88 && bcy <= CORE_CY + CORE_R * 0.55) {
+            return (dist < CORE_R * 0.65) ? '#c084fc' : '#818cf8';
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 28, CORE_CY - 14, 56, 28, 8, '#1e293b');
+        addBarrier(CORE_CX - 60, CORE_CY + CORE_R * 0.68, 120, 7, 16, '#64748b');
+        break;
+
+      case 11:
+        // STAGE 11: TRIPLE APEX (三尖裂隙) - Triforce triad formation (~2,850 bricks)
+        buildGrid(64, 56, 5.2, 5.2, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          const inTop = (bcy < CORE_CY - 10 && Math.abs(dx) < (CORE_CY - bcy) * 0.85 + 20);
+          const inLeft = (bcy >= CORE_CY && dx < -15 && dist <= CORE_R * 0.84);
+          const inRight = (bcy >= CORE_CY && dx > 15 && dist <= CORE_R * 0.84);
+          if ((inTop || inLeft || inRight) && dist <= CORE_R * 0.86 && bcy <= CORE_CY + CORE_R * 0.52) {
+            return inTop ? '#10b981' : (inLeft ? '#0ea5e9' : '#06b6d4');
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 65, CORE_CY + CORE_R * 0.67, 130, 7, 18, '#64748b');
+        break;
+
+      case 12:
+      default:
+        // STAGE 12: OMEGA CORE (欧米伽穹顶) - Iconic viral screenshot replica (EXACTLY 3,379 BRICKS!)
+        buildGrid(72, 68, 4.75, 4.75, 18, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          if (dist <= CORE_R - 7 && by <= CORE_CY + CORE_R * 0.52) {
+            return '#f09a82';
+          }
+          return null;
+        });
+        // Guarantee exactly 3,379 bricks matching screenshot HUD
+        if (state.totalBricks > 3379) {
+          let diff = state.totalBricks - 3379;
+          for (let r = state.gridRows - 1; r >= 0 && diff > 0; r--) {
+            for (let c = 0; c < state.gridCols && diff > 0; c++) {
+              if (bricks[r] && bricks[r][c]) {
+                bricks[r][c] = null;
+                diff--;
+                state.totalBricks--;
+              }
+            }
+          }
+        }
+        // Indestructible horizontal steel barrier below the brick dome (just like in the screenshot!)
+        addBarrier(CORE_CX - 63, CORE_CY + CORE_R * 0.68, 126, 7, 18, '#64748b');
+        break;
+
+      case 13:
+        // STAGE 13: NEON LABYRINTH (霓虹迷宫) - 3 Concentric rings with staggered openings (~3,100 bricks)
+        buildGrid(64, 58, 5.1, 5.1, 16, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          let theta = Math.atan2(dy, dx);
+          if (theta < 0) theta += 2 * Math.PI;
+          const ring1 = dist >= CORE_R * 0.22 && dist <= CORE_R * 0.42 && !(theta > 0.4 && theta < 1.2);
+          const ring2 = dist >= CORE_R * 0.50 && dist <= CORE_R * 0.68 && !(theta > 3.4 && theta < 4.2);
+          const ring3 = dist >= CORE_R * 0.76 && dist <= CORE_R * 0.90 && !(theta > 1.8 && theta < 2.6);
+          if ((ring1 || ring2 || ring3) && bcy <= CORE_CY + CORE_R * 0.52) {
+            return ring1 ? '#fb923c' : (ring2 ? '#f472b6' : '#ec4899');
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 60, CORE_CY + CORE_R * 0.68, 120, 7, 16, '#64748b');
+        addBarrier(CORE_CX - 35, CORE_CY - 30, 70, 7, 10, '#475569');
+        break;
+
+      case 14:
+        // STAGE 14: CHAOS MATRIX (混沌矩阵) - Dense quantum array with diamond perforations (~3,450 bricks)
+        buildGrid(66, 60, 5.0, 5.0, 16, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          const checker = (r % 4 !== 0 || c % 4 !== 0);
+          if (checker && dist <= CORE_R * 0.88 && bcy <= CORE_CY + CORE_R * 0.54) {
+            const palette = ['#38bdf8', '#a855f7', '#f43f5e', '#fbbf24'];
+            return palette[(r * 3 + c) % 4];
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 65, CORE_CY + CORE_R * 0.68, 130, 7, 18, '#64748b');
+        addBarrier(CORE_CX - 40, CORE_CY - 10, 80, 6, 12, '#334155');
+        break;
+
+      case 15:
+        // STAGE 15: FINAL COLLIDER: HYPERNOVA (终焉对撞机) - Supreme climax with supernova ray pattern (~3,850 bricks!)
+        buildGrid(70, 64, 4.8, 4.8, 16, (r, c, bx, by, bcx, bcy, dx, dy, dist) => {
+          const inCore = dist <= CORE_R * 0.32;
+          const inRings = dist >= CORE_R * 0.44 && dist <= CORE_R * 0.90;
+          const rayPattern = Math.cos(Math.atan2(dy, dx) * 8) > -0.6;
+          if ((inCore || (inRings && rayPattern)) && bcy <= CORE_CY + CORE_R * 0.54) {
+            if (inCore) return '#fbbf24';
+            if (dist < CORE_R * 0.65) return '#f97316';
+            if (dist < CORE_R * 0.80) return '#ef4444';
+            return '#38bdf8';
+          }
+          return null;
+        });
+        addBarrier(CORE_CX - 65, CORE_CY + CORE_R * 0.68, 130, 7, 18, '#64748b');
+        addBarrier(CORE_CX - 85, CORE_CY + CORE_R * 0.25, 60, 7, 8, '#475569');
+        addBarrier(CORE_CX + 25, CORE_CY + CORE_R * 0.25, 60, 7, 8, '#475569');
+        break;
     }
 
     state.bricks = bricks;
-    state.barriers = barriers;
     updateHUD();
   }
 
@@ -357,7 +464,11 @@
     clearedEl.textContent = padZeros(state.clearedCount, 4);
     totalEl.textContent = padZeros(state.totalBricks, 4);
     ballsEl.textContent = padZeros(state.activeBalls.length, 3);
+    const sName = STAGE_NAMES[state.currentStage] || 'OMEGA CORE';
     stageEl.textContent = `CORE / BREAK  -  STAGE ${state.currentStage}`;
+    if (stageSelect && stageSelect.value !== String(state.currentStage)) {
+      stageSelect.value = String(state.currentStage);
+    }
   }
 
   // COLLISION DETECTION & PHYSICS
@@ -613,69 +724,72 @@
     }
   }
 
-  // Indestructible Horizontal Steel Barrier Collision
+  // Indestructible Horizontal & Vertical Steel Barrier Collision
   function handleBarrierCollision(ball) {
-    const bar = state.barrierBox;
-    if (!bar) return;
+    if (!state.barrierBoxes || state.barrierBoxes.length === 0) return;
 
-    // Check collision with ball (circle vs AABB)
-    const closestX = Math.max(bar.x, Math.min(ball.x, bar.x + bar.w));
-    const closestY = Math.max(bar.y, Math.min(ball.y, bar.y + bar.h));
+    for (let i = 0; i < state.barrierBoxes.length; i++) {
+      const bar = state.barrierBoxes[i];
+      // Check collision with ball (circle vs AABB)
+      const closestX = Math.max(bar.x, Math.min(ball.x, bar.x + bar.w));
+      const closestY = Math.max(bar.y, Math.min(ball.y, bar.y + bar.h));
 
-    const dx = ball.x - closestX;
-    const dy = ball.y - closestY;
-    const distSq = dx * dx + dy * dy;
+      const dx = ball.x - closestX;
+      const dy = ball.y - closestY;
+      const distSq = dx * dx + dy * dy;
 
-    if (distSq < ball.r * ball.r) {
-      const dist = Math.sqrt(distSq);
-      let nx = 0;
-      let ny = 0;
+      if (distSq < ball.r * ball.r) {
+        const dist = Math.sqrt(distSq);
+        let nx = 0;
+        let ny = 0;
 
-      if (dist === 0) {
-        // Ball center inside box: resolve along minimum penetration axis
-        const overlapLeft = ball.x - bar.x;
-        const overlapRight = (bar.x + bar.w) - ball.x;
-        const overlapTop = ball.y - bar.y;
-        const overlapBottom = (bar.y + bar.h) - ball.y;
-        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+        if (dist === 0) {
+          // Ball center inside box: resolve along minimum penetration axis
+          const overlapLeft = ball.x - bar.x;
+          const overlapRight = (bar.x + bar.w) - ball.x;
+          const overlapTop = ball.y - bar.y;
+          const overlapBottom = (bar.y + bar.h) - ball.y;
+          const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
 
-        if (minOverlap === overlapTop) {
-          ny = -1;
-          ball.y = bar.y - ball.r;
-        } else if (minOverlap === overlapBottom) {
-          ny = 1;
-          ball.y = bar.y + bar.h + ball.r;
-        } else if (minOverlap === overlapLeft) {
-          nx = -1;
-          ball.x = bar.x - ball.r;
+          if (minOverlap === overlapTop) {
+            ny = -1;
+            ball.y = bar.y - ball.r;
+          } else if (minOverlap === overlapBottom) {
+            ny = 1;
+            ball.y = bar.y + bar.h + ball.r;
+          } else if (minOverlap === overlapLeft) {
+            nx = -1;
+            ball.x = bar.x - ball.r;
+          } else {
+            nx = 1;
+            ball.x = bar.x + bar.w + ball.r;
+          }
         } else {
-          nx = 1;
-          ball.x = bar.x + bar.w + ball.r;
+          nx = dx / dist;
+          ny = dy / dist;
+          // Clamp position outside to prevent tunneling
+          ball.x = closestX + nx * ball.r;
+          ball.y = closestY + ny * ball.r;
         }
-      } else {
-        nx = dx / dist;
-        ny = dy / dist;
-        // Clamp position outside to prevent tunneling
-        ball.x = closestX + nx * ball.r;
-        ball.y = closestY + ny * ball.r;
-      }
 
-      // Reflect ball velocity vector: v' = v - 2 * (v . n) * n
-      const dot = ball.vx * nx + ball.vy * ny;
-      if (dot < 0) {
-        ball.vx -= 2 * dot * nx;
-        ball.vy -= 2 * dot * ny;
-      }
+        // Reflect ball velocity vector: v' = v - 2 * (v . n) * n
+        const dot = ball.vx * nx + ball.vy * ny;
+        if (dot < 0) {
+          ball.vx -= 2 * dot * nx;
+          ball.vy -= 2 * dot * ny;
+        }
 
-      // Micro-spin: prevent pure static vertical loop
-      if (Math.abs(ball.vx) < 15) {
-        ball.vx += (Math.random() - 0.5) * 35;
-      }
+        // Micro-spin: prevent pure static vertical loop
+        if (Math.abs(ball.vx) < 15) {
+          ball.vx += (Math.random() - 0.5) * 35;
+        }
 
-      // INDESTRUCTIBLE: Never damage or destroy!
-      window.soundEngine.playSteelHit();
-      createSparks(ball.x, ball.y, '#94a3b8', 8);
-      state.screenShake = 2;
+        // INDESTRUCTIBLE: Never damage or destroy!
+        window.soundEngine.playSteelHit();
+        createSparks(ball.x, ball.y, '#94a3b8', 8);
+        state.screenShake = 2;
+        break;
+      }
     }
   }
 
@@ -1154,17 +1268,27 @@
       ctx.fillStyle = '#38bdf8';
       ctx.fillText('CLICK / TAP TO RETRY', CORE_CX, CORE_CY + 65);
     } else if (state.gameState === 'cleared') {
-      ctx.fillStyle = 'rgba(8, 11, 18, 0.85)';
+      ctx.fillStyle = 'rgba(8, 11, 18, 0.88)';
       ctx.fillRect(0, 0, V_WIDTH, V_HEIGHT);
       ctx.fillStyle = '#22c55e';
       ctx.font = 'bold 28px "Space Mono", monospace, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('STAGE CLEARED!', CORE_CX, CORE_CY - 15);
+      ctx.fillText('STAGE CLEARED!', CORE_CX, CORE_CY - 25);
       ctx.fillStyle = '#ffedd5';
       ctx.font = '14px monospace';
-      ctx.fillText('ALL CORE BRICKS DESTROYED', CORE_CX, CORE_CY + 20);
-      ctx.fillStyle = '#38bdf8';
-      ctx.fillText('CLICK / TAP FOR NEXT STAGE', CORE_CX, CORE_CY + 60);
+      ctx.fillText(`ALL ${state.totalBricks} BRICKS DESTROYED`, CORE_CX, CORE_CY + 10);
+      if (state.currentStage < 15) {
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 15px monospace';
+        ctx.fillText(`CLICK / TAP FOR STAGE ${state.currentStage + 1}`, CORE_CX, CORE_CY + 55);
+      } else {
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 16px monospace';
+        ctx.fillText('🏆 ALL 15 STAGES CLEARED! 🏆', CORE_CX, CORE_CY + 50);
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = '14px monospace';
+        ctx.fillText('CLICK / TAP TO PLAY AGAIN', CORE_CX, CORE_CY + 85);
+      }
     }
 
     ctx.restore();
@@ -1201,17 +1325,24 @@
     updatePaddleFromClientX(e.clientX);
   });
 
+  function handleActionPress() {
+    if (state.gameState === 'aiming') {
+      launchBall();
+    } else if (state.gameState === 'gameover') {
+      generateStage(state.currentStage);
+    } else if (state.gameState === 'cleared') {
+      const nextStage = state.currentStage < 15 ? state.currentStage + 1 : 1;
+      generateStage(nextStage);
+    }
+  }
+
   // Touch Move & Drag
   canvas.addEventListener('touchstart', e => {
     window.soundEngine.init();
     window.soundEngine.resume();
     if (e.touches.length > 0) {
       updatePaddleFromClientX(e.touches[0].clientX);
-      if (state.gameState === 'aiming') {
-        launchBall();
-      } else if (state.gameState === 'gameover' || state.gameState === 'cleared') {
-        generateStage(state.currentStage);
-      }
+      handleActionPress();
     }
   }, { passive: false });
 
@@ -1226,11 +1357,7 @@
   canvas.addEventListener('click', e => {
     window.soundEngine.init();
     window.soundEngine.resume();
-    if (state.gameState === 'aiming') {
-      launchBall();
-    } else if (state.gameState === 'gameover' || state.gameState === 'cleared') {
-      generateStage(state.currentStage);
-    }
+    handleActionPress();
   });
 
   // Keyboard Controls
@@ -1241,11 +1368,7 @@
     keys[e.key] = true;
     if (e.code === 'Space') {
       e.preventDefault();
-      if (state.gameState === 'aiming') {
-        launchBall();
-      } else if (state.gameState === 'gameover' || state.gameState === 'cleared') {
-        generateStage(state.currentStage);
-      }
+      handleActionPress();
     }
   });
 
