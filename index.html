@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#080b12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>CORE / BREAK</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <div class="game-wrapper">
+      
+      <!-- Top Control Bar (Audio, Stage Select, Restart) -->
+      <div class="top-controls">
+        <select id="stageSelect" class="ctrl-btn">
+          <option value="12" selected>STAGE 12: OMEGA CORE (3,379 Bricks)</option>
+          <option value="6">STAGE 6: DUAL CORE (1,600 Bricks)</option>
+          <option value="1">STAGE 1: PROTO CORE (420 Bricks)</option>
+        </select>
+        <div>
+          <button id="muteBtn" class="ctrl-btn">🔊 SOUND</button>
+          <button id="restartBtn" class="ctrl-btn">↺ RESET</button>
+        </div>
+      </div>
+
+      <!-- Top In-Game HUD (Exact Screenshot Replica) -->
+      <header class="hud-header">
+        <div class="hud-item hud-left">
+          <span class="hud-label">CLEARED</span>
+          <span class="hud-value"><span id="clearedCount">0000</span> / <span id="totalCount">3379</span></span>
+        </div>
+
+        <div class="hud-item hud-center">
+          <span id="stageTitle" class="hud-title">CORE / BREAK  -  STAGE 12</span>
+        </div>
+
+        <div class="hud-item hud-right">
+          <span class="hud-label">BALLS</span>
+          <span id="hudBalls" class="hud-value"><span id="ballsCount">001</span></span>
+        </div>
+      </header>
+
+      <!-- Floating Combo Notification -->
+      <div id="comboDisplay" class="combo-banner">HYPER COMBO!</div>
+
+      <!-- Canvas Area -->
+      <main id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+      </main>
+
+      <!-- Bottom Hint Bar -->
+      <footer class="bottom-bar">
+        <span class="bottom-hint">DRAG TO MOVE • TAP / SPACE TO LAUNCH</span>
+      </footer>
+
+    </div>
+  </div>
+
+  <script src="sounds.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
