@@ -79,6 +79,7 @@
     brickW: 5.4,
     brickH: 5.4,
     barriers: [], // defensive steel blocks
+    barrierBox: null, // unified indestructible bounding box
     powerups: [],
     activeEffects: {
       fireball: 0,
@@ -209,20 +210,28 @@
 
       state.totalBricks = count;
 
-      // Defensive horizontal steel barrier below the brick dome (just like in the screenshot!)
+      // Indestructible horizontal steel barrier below the brick dome (just like in the screenshot!)
       const barrierY = CORE_CY + CORE_R * 0.68;
       const barW = 7.0;
       const barH = 7.0;
       const barCols = 18;
       const barStartX = CORE_CX - (barCols * barW) / 2;
+      const barTotalWidth = barCols * barW;
+
+      state.barrierBox = {
+        x: barStartX,
+        y: barrierY,
+        w: barTotalWidth,
+        h: barH
+      };
+
       for (let i = 0; i < barCols; i++) {
         barriers.push({
           x: barStartX + i * barW,
           y: barrierY,
           w: barW - 0.8,
           h: barH,
-          hp: 2,
-          maxHp: 2,
+          indestructible: true,
           color: '#64748b'
         });
       }
@@ -311,17 +320,28 @@
       }
       state.totalBricks = count;
 
-      // Small defensive barrier
+      // Indestructible defensive barrier
       const barrierY = CORE_CY + CORE_R * 0.65;
       const barW = 8;
-      for (let i = 0; i < 12; i++) {
+      const barH = 8;
+      const barCols = 12;
+      const barStartX = CORE_CX - 48;
+      const barTotalWidth = barCols * barW;
+
+      state.barrierBox = {
+        x: barStartX,
+        y: barrierY,
+        w: barTotalWidth,
+        h: barH
+      };
+
+      for (let i = 0; i < barCols; i++) {
         barriers.push({
-          x: CORE_CX - 48 + i * barW,
+          x: barStartX + i * barW,
           y: barrierY,
           w: barW - 1,
-          h: 8,
-          hp: 2,
-          maxHp: 2,
+          h: barH,
+          indestructible: true,
           color: '#94a3b8'
         });
       }
@@ -593,28 +613,69 @@
     }
   }
 
-  // Defensive Steel Barrier Collision
+  // Indestructible Horizontal Steel Barrier Collision
   function handleBarrierCollision(ball) {
-    if (state.barriers.length === 0) return;
-    for (let i = 0; i < state.barriers.length; i++) {
-      const bar = state.barriers[i];
-      if (bar.hp <= 0) continue;
+    const bar = state.barrierBox;
+    if (!bar) return;
 
-      // AABB collision
-      if (
-        ball.x + ball.r >= bar.x &&
-        ball.x - ball.r <= bar.x + bar.w &&
-        ball.y + ball.r >= bar.y &&
-        ball.y - ball.r <= bar.y + bar.h
-      ) {
-        // Reflect vertically
-        ball.vy = -ball.vy;
-        bar.hp--;
-        window.soundEngine.playSteelHit();
-        createSparks(ball.x, ball.y, '#94a3b8', 6);
-        state.screenShake = 3;
-        break;
+    // Check collision with ball (circle vs AABB)
+    const closestX = Math.max(bar.x, Math.min(ball.x, bar.x + bar.w));
+    const closestY = Math.max(bar.y, Math.min(ball.y, bar.y + bar.h));
+
+    const dx = ball.x - closestX;
+    const dy = ball.y - closestY;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq < ball.r * ball.r) {
+      const dist = Math.sqrt(distSq);
+      let nx = 0;
+      let ny = 0;
+
+      if (dist === 0) {
+        // Ball center inside box: resolve along minimum penetration axis
+        const overlapLeft = ball.x - bar.x;
+        const overlapRight = (bar.x + bar.w) - ball.x;
+        const overlapTop = ball.y - bar.y;
+        const overlapBottom = (bar.y + bar.h) - ball.y;
+        const minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+        if (minOverlap === overlapTop) {
+          ny = -1;
+          ball.y = bar.y - ball.r;
+        } else if (minOverlap === overlapBottom) {
+          ny = 1;
+          ball.y = bar.y + bar.h + ball.r;
+        } else if (minOverlap === overlapLeft) {
+          nx = -1;
+          ball.x = bar.x - ball.r;
+        } else {
+          nx = 1;
+          ball.x = bar.x + bar.w + ball.r;
+        }
+      } else {
+        nx = dx / dist;
+        ny = dy / dist;
+        // Clamp position outside to prevent tunneling
+        ball.x = closestX + nx * ball.r;
+        ball.y = closestY + ny * ball.r;
       }
+
+      // Reflect ball velocity vector: v' = v - 2 * (v . n) * n
+      const dot = ball.vx * nx + ball.vy * ny;
+      if (dot < 0) {
+        ball.vx -= 2 * dot * nx;
+        ball.vy -= 2 * dot * ny;
+      }
+
+      // Micro-spin: prevent pure static vertical loop
+      if (Math.abs(ball.vx) < 15) {
+        ball.vx += (Math.random() - 0.5) * 35;
+      }
+
+      // INDESTRUCTIBLE: Never damage or destroy!
+      window.soundEngine.playSteelHit();
+      createSparks(ball.x, ball.y, '#94a3b8', 8);
+      state.screenShake = 2;
     }
   }
 
@@ -909,15 +970,19 @@
     ctx.arc(CORE_CX, CORE_CY, CORE_R + 30, 0, Math.PI * 2);
     ctx.fill();
 
-    // 1. Draw Defensive Steel Barriers
-    state.barriers.forEach(bar => {
-      if (bar.hp <= 0) return;
-      ctx.fillStyle = bar.hp === 2 ? '#64748b' : '#94a3b8';
-      ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
-      ctx.strokeStyle = '#38bdf8';
-      ctx.lineWidth = 0.8;
-      ctx.strokeRect(bar.x, bar.y, bar.w, bar.h);
-    });
+    // 1. Draw Indestructible Steel Barrier
+    if (state.barriers && state.barriers.length > 0) {
+      state.barriers.forEach(bar => {
+        // Metallic steel armor blocks with crisp bevel
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(bar.x, bar.y, bar.w, bar.h);
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(bar.x + 0.6, bar.y + 0.6, bar.w - 1.2, bar.h - 1.2);
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 0.8;
+        ctx.strokeRect(bar.x, bar.y, bar.w, bar.h);
+      });
+    }
 
     // 2. Draw Bricks Matrix
     for (let r = 0; r < state.gridRows; r++) {
